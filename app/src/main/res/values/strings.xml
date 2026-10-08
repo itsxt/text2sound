@@ -1,0 +1,31 @@
+<resources>
+    <string name="app_name">声笺</string>
+    <string name="tagline">让文字，娓娓道来。</string>
+    <string name="sample">你好，欢迎使用声笺。\n\n把想说的话写在这里，让文字变成声音。你可以放慢语速，听一段喜欢的文字；也可以把声音保存下来，随时重温。</string>
+    <string name="editor_hint">写下或粘贴你想听的文字…</string>
+    <string name="engine_note">音色由手机语音引擎提供。标注“离线”的音色可在语音包安装后离线使用。</string>
+    <string name="brand_chinese">中文朗读 · 声随心动</string>
+    <string name="chinese_language">中文普通话</string>
+    <string name="history">最近朗读</string>
+    <string name="subtitle">一段文字 · 一种声音 · 片刻专注</string>
+    <string name="text_section">01  写下文字</string>
+    <string name="paste">粘贴</string>
+    <string name="clear">清空</string>
+    <string name="sample_action">试试示例</string>
+    <string name="empty_count">0 / 20,000</string>
+    <string name="voice_section">02  调好声音</string>
+    <string name="language">朗读语言</string>
+    <string name="voice">音色</string>
+    <string name="select_voice">选择音色</string>
+    <string name="rate">语速</string>
+    <string name="normal_multiplier">1.00×</string>
+    <string name="rate_description">语速，0.5 到 2 倍</string>
+    <string name="pitch">音调</string>
+    <string name="pitch_description">音调，0.5 到 2 倍</string>
+    <string name="engine_settings">语音引擎与语音包  ↗</string>
+    <string name="local_draft">草稿保存在本机 · 无需登录</string>
+    <string name="engine_loading">正在连接语音引擎…</string>
+    <string name="play">▶  开始朗读</string>
+    <string name="export">导出音频</string>
+    <string name="audio_saved">音频已保存 · WAV</string>
+</resources>
