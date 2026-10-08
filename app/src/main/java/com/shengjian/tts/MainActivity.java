@@ -146,7 +146,7 @@ public final class MainActivity extends Activity implements SpeechEngine.Listene
         if (isDestroyed()) return;
         if (ready) refreshVoices();
         else {
-            status.setText("未找到可用语音引擎，请打开下方语音设置");
+            status.setText("未找到可用语音引擎，请打开语音设置");
             voice.setAdapter(adapter(new String[]{"暂无可用音色"}));
             updateControls();
         }
@@ -161,7 +161,7 @@ public final class MainActivity extends Activity implements SpeechEngine.Listene
         voices = engine.voices(selectedLocale());
         String saved = preferences.getString(voiceKey(), "");
         List<String> labels = new ArrayList<>();
-        labels.add("推荐音色 · 优先离线");
+        labels.add(languageReady ? "推荐音色 · 优先离线" : "暂无可用中文音色");
         int selected = 0;
         for (int i = 0; i < voices.size(); i++) {
             Voice item = voices.get(i);
@@ -171,7 +171,7 @@ public final class MainActivity extends Activity implements SpeechEngine.Listene
         voice.setAdapter(adapter(labels.toArray(new String[0])));
         voice.setSelection(selected);
         status.setText(languageReady ? "准备好了，听听你的文字" :
-                result == TextToSpeech.LANG_MISSING_DATA ? "缺少中文语音包，请在语音设置中安装" : "当前引擎不支持中文，请切换语音引擎");
+                result == TextToSpeech.LANG_MISSING_DATA ? "中文音色尚未就绪，请在语音设置中安装中文语音包" : "当前引擎不支持中文，请切换语音引擎");
         updateControls();
     }
 

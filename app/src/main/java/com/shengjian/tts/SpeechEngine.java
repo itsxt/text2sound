@@ -10,6 +10,7 @@ import android.os.Looper;
 import android.speech.tts.TextToSpeech;
 import android.speech.tts.UtteranceProgressListener;
 import android.speech.tts.Voice;
+import android.util.Log;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -23,6 +24,8 @@ import java.util.concurrent.Executors;
 
 /** All job state is confined to the main thread; engine callbacks are marshalled to it. */
 public final class SpeechEngine {
+    private static final String TAG = "ShengJianTTS";
+    private static final String MISSING_CHINESE_VOICE = "没有可用的中文音色，请在语音设置中安装中文语音包，或切换支持中文的引擎";
     public interface Listener {
         void onReady(boolean ready);
         void onProgress(String status, boolean busy, int done, int total);
@@ -80,6 +83,7 @@ public final class SpeechEngine {
     private void initialize(int status, AudioAttributes attributes) {
         if (closed) return;
         ready = status == TextToSpeech.SUCCESS;
+        Log.i(TAG, "init status=" + status + " engine=" + tts.getDefaultEngine());
         if (ready) {
             tts.setAudioAttributes(attributes);
             tts.setOnUtteranceProgressListener(new UtteranceProgressListener() {
@@ -88,7 +92,12 @@ public final class SpeechEngine {
                 @Override public void onError(String id) { onError(id, TextToSpeech.ERROR); }
                 @Override public void onError(String id, int code) {
                     main.post(() -> {
-                        if (matches(id)) fail(errorMessage(code));
+                        if (matches(id)) {
+                            Log.w(TAG, "synthesis_failed code=" + code + " engine=" + tts.getDefaultEngine()
+                                    + " voice=" + describe(tts.getVoice()) + " export=" + current.export
+                                    + " chunk=" + (current.index + 1) + "/" + current.chunks.size());
+                            fail(errorMessage(code));
+                        }
                     });
                 }
             });
@@ -99,15 +108,32 @@ public final class SpeechEngine {
     public boolean isReady() { return ready; }
     public boolean isBusy() { return current != null; }
     public String defaultEngine() { return tts.getDefaultEngine(); }
-    public int setLanguage(Locale locale) { return ready ? tts.setLanguage(locale) : TextToSpeech.LANG_NOT_SUPPORTED; }
+    public int setLanguage(Locale locale) {
+        if (!ready) return TextToSpeech.LANG_NOT_SUPPORTED;
+        int reported = tts.setLanguage(locale);
+        List<Voice> usable = voices(locale);
+        // Some engines report LANG_COUNTRY_AVAILABLE before downloading the voice data.
+        // Require an actual usable voice instead of falling back to an uninstalled default.
+        int verified = reported >= TextToSpeech.LANG_AVAILABLE && usable.isEmpty()
+                ? TextToSpeech.LANG_MISSING_DATA : reported;
+        Log.i(TAG, "language=" + locale.toLanguageTag() + " reported=" + reported
+                + " verified=" + verified + " usableVoices=" + usable.size()
+                + " defaultVoice=" + describe(tts.getVoice()));
+        return verified;
+    }
 
     public List<Voice> voices(Locale locale) {
         List<Voice> result = new ArrayList<>();
         Set<Voice> voices = ready ? tts.getVoices() : null;
         if (voices != null) for (Voice voice : voices) {
-            Set<String> features = voice.getFeatures();
-            if (voice.getLocale().getLanguage().equals(locale.getLanguage())
-                    && (features == null || !features.contains(TextToSpeech.Engine.KEY_FEATURE_NOT_INSTALLED))) result.add(voice);
+            if (isUsable(voice, locale)) result.add(voice);
+        }
+        // Retain compatibility with engines that expose a default voice but no full catalog.
+        Voice fallback = ready ? tts.getVoice() : null;
+        if (isUsable(fallback, locale)) {
+            boolean listed = false;
+            for (Voice candidate : result) if (candidate.getName().equals(fallback.getName())) listed = true;
+            if (!listed) result.add(fallback);
         }
         result.sort(Comparator.comparing(Voice::isNetworkConnectionRequired)
                 .thenComparing(v -> !v.getLocale().equals(locale))
@@ -115,14 +141,36 @@ public final class SpeechEngine {
         return result;
     }
 
+    private static boolean isUsable(Voice voice, Locale locale) {
+        if (voice == null || !voice.getLocale().getLanguage().equals(locale.getLanguage())) return false;
+        Set<String> features = voice.getFeatures();
+        return features == null || !features.contains(TextToSpeech.Engine.KEY_FEATURE_NOT_INSTALLED);
+    }
+
+    private static String describe(Voice voice) {
+        if (voice == null) return "none";
+        return voice.getName() + ",locale=" + voice.getLocale().toLanguageTag()
+                + ",network=" + voice.isNetworkConnectionRequired() + ",features=" + voice.getFeatures();
+    }
+
     public void start(String text, boolean export, Locale locale, Voice voice, float rate, float pitch) {
         if (!ready || closed) { listener.onError("语音引擎尚未就绪，请检查系统语音设置"); return; }
         if (text.trim().isEmpty()) { listener.onError("请先输入要朗读的文字"); return; }
         stopInternal();
-        if (tts.setLanguage(locale) < 0) { listener.onError("当前引擎缺少此语言，请安装对应语音包"); return; }
-        if (voice != null && tts.setVoice(voice) != TextToSpeech.SUCCESS) {
+        if (setLanguage(locale) < 0) { listener.onError(MISSING_CHINESE_VOICE); return; }
+        List<Voice> available = voices(locale);
+        Voice selected = null;
+        if (voice == null && !available.isEmpty()) selected = available.get(0);
+        else if (voice != null) {
+            for (Voice candidate : available) {
+                if (candidate.getName().equals(voice.getName())) { selected = candidate; break; }
+            }
+        }
+        if (selected == null) { listener.onError(MISSING_CHINESE_VOICE); return; }
+        if (tts.setVoice(selected) != TextToSpeech.SUCCESS) {
             listener.onError("此音色暂不可用，请更换音色或安装语音包"); return;
         }
+        Log.i(TAG, "start engine=" + tts.getDefaultEngine() + " voice=" + describe(selected) + " export=" + export);
         if (tts.setSpeechRate(rate) != TextToSpeech.SUCCESS || tts.setPitch(pitch) != TextToSpeech.SUCCESS) {
             listener.onError("当前引擎不支持此语速或音调设置"); return;
         }
@@ -247,6 +295,7 @@ public final class SpeechEngine {
             case TextToSpeech.ERROR_NOT_INSTALLED_YET: return "语音包尚未安装完成，请在系统设置中下载";
             case TextToSpeech.ERROR_OUTPUT: return "无法输出音频，请检查音量、音频设备和存储空间";
             case TextToSpeech.ERROR_INVALID_REQUEST: return "引擎无法处理这段文字，请缩短文字或更换音色";
+            case TextToSpeech.ERROR_SYNTHESIS: return "中文音色合成失败，请检查语音包是否安装完成；联网音色还需能连接到引擎服务";
             default: return "语音合成失败，请检查语音包或更换语音引擎";
         }
     }
